@@ -44,6 +44,31 @@ export type UpdateTransactionInput = {
   transactionDate: string;
 };
 
+export async function getTransactionsByBook(
+  bookId: number,
+): Promise<Transaction[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<TransactionRow>(
+    `
+      SELECT
+        id,
+        book_id,
+        name,
+        bank_id,
+        amount,
+        direction,
+        transaction_date,
+        created_at,
+        updated_at
+      FROM transactions
+      WHERE book_id = ?
+      ORDER BY transaction_date DESC, id DESC
+    `,
+    bookId,
+  );
+  return rows.map(mapTransaction);
+}
+
 export async function getTransactionById(
   id: number,
 ): Promise<Transaction | null> {

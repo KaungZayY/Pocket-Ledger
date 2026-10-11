@@ -40,6 +40,22 @@ export async function getBookById(id: number): Promise<Book | null> {
   return mapBook(row);
 }
 
+export async function getBooks(): Promise<Book[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<BookRow>(
+    `
+      SELECT
+        id,
+        name,
+        created_at,
+        updated_at
+      FROM books
+      ORDER BY created_at DESC
+    `,
+  );
+  return rows.map(mapBook);
+}
+
 export async function createBook(name: string): Promise<Book> {
   const db = await getDatabase();
 
@@ -110,4 +126,3 @@ export async function deleteBook(id: number): Promise<void> {
     throw new Error("Book not found");
   }
 }
-

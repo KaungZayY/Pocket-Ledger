@@ -1,98 +1,321 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
+import { getBooks } from '@/repositories/bookRepository';
+import { getTransactionsByBook } from '@/repositories/transactionRepository';
+import { calculateBalance } from '@/utils/balance';
+import type { Book } from '@/types/book';
+
+type BookSummary = {
+  book: Book;
+  balance: number;
+  transactionCount: number;
+};
+
+function formatAmount(amount: number): string {
+  return (amount / 100).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
+
+  const [books, setBooks] = useState<BookSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadBooks = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const savedBooks = await getBooks();
+
+      const summaries = await Promise.all(
+        savedBooks.map(async (book) => {
+          const transactions = await getTransactionsByBook(book.id);
+
+          return {
+            book,
+            balance: calculateBalance(transactions),
+            transactionCount: transactions.length,
+          };
+        }),
+      );
+
+      setBooks(summaries);
+    } catch (error) {
+      console.error('Failed to load books:', error);
+      Alert.alert('Error', 'Could not load your books.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadBooks();
+    }, [loadBooks]),
+  );
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.eyebrow}>YOUR FINANCES</Text>
+          <Text style={styles.title}>My Books</Text>
+        </View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+        <Text style={styles.bookCount}>
+          {books.length} {books.length === 1 ? 'book' : 'books'}
+        </Text>
+      </View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#2563EB" />
+        </View>
+      ) : (
+        <FlatList
+          data={books}
+          keyExtractor={(item) => String(item.book.id)}
+          contentContainerStyle={
+            books.length === 0 ? styles.emptyList : styles.list
+          }
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <Pressable
+              style={({ pressed }) => [
+                styles.bookCard,
+                pressed && styles.pressed,
+              ]}
+              onPress={() =>
+                router.push(`/books/${item.book.id}` as never)
+              }
+            >
+              <View style={styles.cardTop}>
+                <View style={styles.bookIcon}>
+                  <Text style={styles.bookIconText}>▤</Text>
+                </View>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+                <Text style={styles.chevron}>›</Text>
+              </View>
+
+              <Text style={styles.bookName} numberOfLines={1}>
+                {item.book.name}
+              </Text>
+
+              <Text style={styles.balanceLabel}>Current balance</Text>
+
+              <Text style={styles.balance}>
+                {formatAmount(item.balance)}
+              </Text>
+
+              <View style={styles.cardFooter}>
+                <Text style={styles.transactionCount}>
+                  {item.transactionCount}{' '}
+                  {item.transactionCount === 1
+                    ? 'transaction'
+                    : 'transactions'}
+                </Text>
+                <Text style={styles.openLabel}>View book →</Text>
+              </View>
+            </Pressable>
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Text style={styles.emptyIconText}>▤</Text>
+              </View>
+
+              <Text style={styles.emptyTitle}>No books yet</Text>
+
+              <Text style={styles.emptyDescription}>
+                Create your first book to start recording your
+                bank transactions.
+              </Text>
+            </View>
+          }
+        />
+      )}
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.createButton,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={() => router.push('/books/create')}
+      >
+        <Text style={styles.createButtonText}>＋  New Book</Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    backgroundColor: '#F5F7FB',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  header: {
     flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    marginBottom: 24,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+  eyebrow: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 6,
   },
   title: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#172033',
+  },
+  bookCount: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  list: {
+    paddingBottom: 20,
+    gap: 14,
+  },
+  emptyList: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingBottom: 40,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#E8ECF3',
+  },
+  pressed: {
+    opacity: 0.75,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  bookIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: '#E8EEFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookIconText: {
+    fontSize: 25,
+    color: '#3159C7',
+  },
+  chevron: {
+    fontSize: 28,
+    color: '#94A3B8',
+  },
+  bookName: {
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#172033',
+    marginBottom: 14,
+  },
+  balanceLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 5,
+  },
+  balance: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#172033',
+    fontVariant: ['tabular-nums'],
+  },
+  cardFooter: {
+    marginTop: 18,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF1F6',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  transactionCount: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  openLabel: {
+    color: '#3159C7',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: '#E8EEFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyIconText: {
+    fontSize: 38,
+    color: '#3159C7',
+  },
+  emptyTitle: {
+    fontSize: 21,
+    fontWeight: '700',
+    color: '#172033',
+    marginBottom: 8,
+  },
+  emptyDescription: {
+    fontSize: 14,
+    color: '#64748B',
     textAlign: 'center',
+    lineHeight: 22,
   },
-  code: {
-    textTransform: 'uppercase',
+  createButton: {
+    backgroundColor: '#3159C7',
+    paddingVertical: 17,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 16,
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  buttonPressed: {
+    opacity: 0.8,
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
