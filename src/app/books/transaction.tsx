@@ -1,9 +1,7 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,13 +9,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
-import { createTransaction } from '@/repositories/transactionRepository';
 import { BANKS } from '@/constants/banks';
+import { createTransaction, getTransactionById, updateTransaction} from '@/repositories/transactionRepository';
 import type { TransactionDirection } from '@/types/transaction';
 
-function getToday(): string {
+function getToday() {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -26,39 +24,105 @@ function getToday(): string {
   return `${year}-${month}-${day}`;
 }
 
-export default function TransactionFormScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams<{ bookId: string }>();
-  const bookId = Number(params.bookId);
+function getParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
-  const [direction, setDirection] =
-    useState<TransactionDirection>('+');
+function formatAmount(amount: number) {
+  return (amount / 100).toFixed(2);
+}
+
+export default function TransactionScreen() {
+  const params = useLocalSearchParams<{
+    bookId?: string;
+    transactionId?: string;
+  }>();
+
+  const bookId = Number(getParam(params.bookId));
+  const transactionIdParam = getParam(params.transactionId);
+  const transactionId = transactionIdParam
+    ? Number(transactionIdParam)
+    : null;
+
+  const isEditing = transactionId !== null;
+
   const [name, setName] = useState('');
   const [bankId, setBankId] = useState(BANKS[0]?.id ?? '');
   const [amount, setAmount] = useState('');
+  const [direction, setDirection] =
+    useState<TransactionDirection>('+');
   const [date, setDate] = useState(getToday());
+  const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadTransaction() {
+      if (!isEditing || transactionId === null) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const transaction = await getTransactionById(transactionId);
+
+        if (!active) return;
+
+        if (!transaction || transaction.bookId !== bookId) {
+          Alert.alert('Not found', 'This transaction could not be found.');
+          router.back();
+          return;
+        }
+
+        setName(transaction.name);
+        setBankId(transaction.bankId);
+        setAmount(formatAmount(transaction.amount));
+        setDirection(transaction.direction);
+        setDate(transaction.transactionDate.slice(0, 10));
+      } catch {
+        if (active) {
+          Alert.alert('Error', 'Could not load the transaction.');
+          router.back();
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadTransaction();
+
+    return () => {
+      active = false;
+    };
+  }, [bookId, isEditing, transactionId]);
+
   async function handleSave() {
-    if (!Number.isSafeInteger(bookId) || bookId <= 0) {
+    if (!Number.isInteger(bookId) || bookId <= 0) {
       Alert.alert('Error', 'Invalid book.');
       return;
     }
 
-    if (!name.trim()) {
-      Alert.alert('Name required', 'Enter the person or business name.');
+    if (isEditing && (!transactionId || !Number.isInteger(transactionId))) {
+      Alert.alert('Error', 'Invalid transaction.');
+      return;
+    }
+
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      Alert.alert('Required', 'Enter a transaction name.');
       return;
     }
 
     if (!BANKS.some((bank) => bank.id === bankId)) {
-      Alert.alert('Bank required', 'Please select a bank.');
+      Alert.alert('Required', 'Select a bank.');
       return;
     }
 
-    // Store money as integer minor units, not floating-point values.
-    const normalizedAmount = amount.trim();
+    const amountMatch = amount.trim().match(/^(\d+)(?:\.(\d{1,2}))?$/);
 
-    if (!/^\d+(\.\d{1,2})?$/.test(normalizedAmount)) {
+    if (!amountMatch) {
       Alert.alert(
         'Invalid amount',
         'Enter a positive amount with up to two decimal places.',
@@ -66,16 +130,17 @@ export default function TransactionFormScreen() {
       return;
     }
 
-    const [wholePart, decimalPart = ''] = normalizedAmount.split('.');
-    const amountInMinorUnits =
-      Number(wholePart) * 100 +
-      Number(decimalPart.padEnd(2, '0'));
+    const wholeAmount = Number(amountMatch[1]);
+    const decimalAmount = Number(
+      (amountMatch[2] ?? '').padEnd(2, '0'),
+    );
+    const amountInMinorUnits = wholeAmount * 100 + decimalAmount;
 
     if (
       !Number.isSafeInteger(amountInMinorUnits) ||
       amountInMinorUnits <= 0
     ) {
-      Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
+      Alert.alert('Invalid amount', 'Enter a valid positive amount.');
       return;
     }
 
@@ -92,334 +157,233 @@ export default function TransactionFormScreen() {
       parsedDate.getMonth() + 1 !== Number(date.slice(5, 7)) ||
       parsedDate.getDate() !== Number(date.slice(8, 10))
     ) {
-      Alert.alert('Invalid date', 'Enter a real calendar date.');
+      Alert.alert('Invalid date', 'Enter a real date in YYYY-MM-DD format.');
       return;
     }
 
-    try {
-      setSaving(true);
+    setSaving(true);
 
-      await createTransaction({
-        bookId,
-        name: name.trim(),
-        bankId,
-        amount: amountInMinorUnits,
-        direction,
-        transactionDate: `${date}T12:00:00`,
-      });
+    try {
+      if (isEditing && transactionId !== null) {
+        await updateTransaction(transactionId, {
+          name: trimmedName,
+          bankId,
+          amount: amountInMinorUnits,
+          direction,
+          transactionDate: `${date}T12:00:00`,
+        });
+      } else {
+        await createTransaction({
+          bookId,
+          name: trimmedName,
+          bankId,
+          amount: amountInMinorUnits,
+          direction,
+          transactionDate: `${date}T12:00:00`,
+        });
+      }
 
       router.back();
-    } catch (error) {
-      console.error('Failed to create transaction:', error);
-      Alert.alert('Error', 'Could not save the transaction.');
+    } catch {
+      Alert.alert(
+        'Save failed',
+        'Could not save this transaction. Please try again.',
+      );
     } finally {
       setSaving(false);
     }
   }
 
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <Text>Loading transaction...</Text>
+      </View>
+    );
+  }
+
   return (
-    <>
-      <Stack.Screen
-        options={{
-          title: 'Add Transaction',
-          headerBackTitle: 'Back',
-          headerShadowVisible: false,
-          headerStyle: { backgroundColor: '#F5F7FB' },
-          headerTintColor: '#172033',
-        }}
-      />
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>
+        {isEditing ? 'Edit Transaction' : 'Add Transaction'}
+      </Text>
 
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.heading}>New transaction</Text>
-          <Text style={styles.description}>
-            Record money coming into or going out of this book.
-          </Text>
-
-          <Text style={styles.label}>Direction</Text>
-
-          <View style={styles.directionRow}>
-            <Pressable
-              onPress={() => setDirection('+')}
-              style={[
-                styles.directionButton,
-                direction === '+' && styles.creditSelected,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.directionText,
-                  direction === '+' && styles.selectedText,
-                ]}
-              >
-                ↑  Credit
-              </Text>
-              <Text style={styles.directionHint}>Money in</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setDirection('-')}
-              style={[
-                styles.directionButton,
-                direction === '-' && styles.debitSelected,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.directionText,
-                  direction === '-' && styles.selectedText,
-                ]}
-              >
-                ↓  Debit
-              </Text>
-              <Text style={styles.directionHint}>Money out</Text>
-            </Pressable>
-          </View>
-
-          <Text style={styles.label}>Name</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Salary, John, Supermarket"
-            placeholderTextColor="#94A3B8"
-            maxLength={100}
-            returnKeyType="next"
-          />
-
-          <Text style={styles.label}>Bank account</Text>
-          <View style={styles.bankList}>
-            {BANKS.map((bank) => {
-              const selected = bankId === bank.id;
-
-              return (
-                <Pressable
-                  key={bank.id}
-                  onPress={() => setBankId(bank.id)}
-                  style={[
-                    styles.bankOption,
-                    selected && styles.bankSelected,
-                  ]}
-                >
-                  <View style={styles.bankIcon}>
-                    <Text style={styles.bankIconText}>
-                      {bank.name.charAt(0)}
-                    </Text>
-                  </View>
-
-                  <Text style={styles.bankName}>{bank.name}</Text>
-
-                  <View
-                    style={[
-                      styles.radio,
-                      selected && styles.radioSelected,
-                    ]}
-                  >
-                    {selected && <View style={styles.radioDot} />}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={styles.label}>Amount</Text>
-          <TextInput
-            style={styles.input}
-            value={amount}
-            onChangeText={(value) => {
-              if (/^\d*\.?\d{0,2}$/.test(value)) {
-                setAmount(value);
-              }
-            }}
-            placeholder="0.00"
-            placeholderTextColor="#94A3B8"
-            keyboardType="decimal-pad"
-          />
-
-          <Text style={styles.hint}>
-            Enter the amount without a currency symbol.
-          </Text>
-
-          <Text style={styles.label}>Transaction date</Text>
-          <TextInput
-            style={styles.input}
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor="#94A3B8"
-            maxLength={10}
-            autoCapitalize="none"
-          />
-
+      <Text style={styles.label}>Transaction type</Text>
+      <View style={styles.directionRow}>
+        {(['+', '-'] as const).map((item) => (
           <Pressable
-            style={({ pressed }) => [
-              styles.saveButton,
-              (pressed || saving) && styles.buttonPressed,
+            key={item}
+            onPress={() => setDirection(item)}
+            style={[
+              styles.directionButton,
+              direction === item && styles.directionSelected,
             ]}
-            onPress={handleSave}
-            disabled={saving}
           >
-            <Text style={styles.saveButtonText}>
-              {saving ? 'Saving...' : 'Save Transaction'}
+            <Text
+              style={[
+                styles.directionText,
+                direction === item && styles.directionTextSelected,
+              ]}
+            >
+              {item === '+' ? 'Credit (+)' : 'Debit (-)'}
             </Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </>
+        ))}
+      </View>
+
+      <Text style={styles.label}>Name / From or To</Text>
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        placeholder="e.g. Salary or Grocery Store"
+        maxLength={150}
+      />
+
+      <Text style={styles.label}>Bank account</Text>
+      <View style={styles.bankList}>
+        {BANKS.map((bank) => (
+          <Pressable
+            key={bank.id}
+            onPress={() => setBankId(bank.id)}
+            style={[
+              styles.bankOption,
+              bankId === bank.id && styles.bankSelected,
+            ]}
+          >
+            <Text
+              style={[
+                styles.bankText,
+                bankId === bank.id && styles.bankTextSelected,
+              ]}
+            >
+              {bank.name}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={styles.label}>Amount</Text>
+      <TextInput
+        style={styles.input}
+        value={amount}
+        onChangeText={(value) => {
+          if (/^\d*\.?\d{0,2}$/.test(value)) setAmount(value);
+        }}
+        placeholder="0.00"
+        keyboardType="decimal-pad"
+      />
+
+      <Text style={styles.label}>Transaction date (YYYY-MM-DD)</Text>
+      <TextInput
+        style={styles.input}
+        value={date}
+        onChangeText={setDate}
+        placeholder="2026-10-16"
+        autoCapitalize="none"
+      />
+
+      <Pressable
+        style={[styles.saveButton, saving && styles.disabledButton]}
+        onPress={handleSave}
+        disabled={saving}
+      >
+        <Text style={styles.saveButtonText}>
+          {saving
+            ? 'Saving...'
+            : isEditing
+              ? 'Save Changes'
+              : 'Save Transaction'}
+        </Text>
+      </Pressable>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    padding: 20,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  center: {
     flex: 1,
-    backgroundColor: '#F5F7FB',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 32,
-  },
-  heading: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#172033',
-    marginBottom: 8,
-  },
-  description: {
-    color: '#64748B',
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 26,
+  title: {
+    fontSize: 25,
+    fontWeight: '700',
+    marginBottom: 12,
   },
   label: {
-    color: '#172033',
     fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 10,
-    marginTop: 20,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
   },
   directionRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   directionButton: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#DCE2EC',
-    borderRadius: 14,
-    padding: 16,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    padding: 13,
+    alignItems: 'center',
   },
-  creditSelected: {
-    backgroundColor: '#DCFCE7',
-    borderColor: '#16A34A',
-  },
-  debitSelected: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#DC2626',
+  directionSelected: {
+    backgroundColor: '#1D4ED8',
+    borderColor: '#1D4ED8',
   },
   directionText: {
-    color: '#334155',
-    fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '600',
   },
-  selectedText: {
-    color: '#172033',
-  },
-  directionHint: {
-    color: '#64748B',
-    fontSize: 12,
-    marginTop: 6,
-  },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#DCE2EC',
-    borderRadius: 13,
-    paddingHorizontal: 15,
-    paddingVertical: 15,
-    fontSize: 15,
-    color: '#172033',
+  directionTextSelected: {
+    color: '#FFFFFF',
   },
   bankList: {
     gap: 8,
   },
   bankOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 13,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
     padding: 12,
   },
   bankSelected: {
-    borderColor: '#3159C7',
-    backgroundColor: '#F0F4FF',
+    borderColor: '#1D4ED8',
+    backgroundColor: '#EFF6FF',
   },
-  bankIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: '#E8EEFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  bankIconText: {
-    color: '#3159C7',
-    fontWeight: '800',
+  bankText: {
     fontSize: 15,
   },
-  bankName: {
-    flex: 1,
-    color: '#172033',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#94A3B8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioSelected: {
-    borderColor: '#3159C7',
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#3159C7',
-  },
-  hint: {
-    color: '#64748B',
-    fontSize: 12,
-    marginTop: 8,
+  bankTextSelected: {
+    color: '#1D4ED8',
+    fontWeight: '700',
   },
   saveButton: {
-    backgroundColor: '#3159C7',
-    borderRadius: 15,
-    paddingVertical: 17,
+    marginTop: 20,
+    padding: 15,
+    borderRadius: 10,
+    backgroundColor: '#1D4ED8',
     alignItems: 'center',
-    marginTop: 30,
   },
-  buttonPressed: {
-    opacity: 0.75,
+  disabledButton: {
+    opacity: 0.6,
   },
   saveButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

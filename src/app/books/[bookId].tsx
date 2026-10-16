@@ -159,7 +159,7 @@ export default function BookDetailsScreen() {
         <View style={styles.container}>
           <View style={styles.balanceCard}>
             <Text style={styles.balanceLabel}>CURRENT BALANCE</Text>
-            <Text style={styles.balanceValue}>{formatAmount(balance)}</Text>
+            <Text style={styles.balanceValue}>{formatSignedAmount(balance)}</Text>
             <Text style={styles.balanceCaption}>
               {transactions.length}{" "}
               {transactions.length === 1 ? "transaction" : "transactions"}
@@ -210,7 +210,7 @@ export default function BookDetailsScreen() {
                       ]}
                       onPress={() =>
                         router.push({
-                          pathname: "/books/transaction",
+                          pathname: "/books/transaction-details",
                           params: {
                             bookId: String(book.id),
                             transactionId: String(transaction.id),
