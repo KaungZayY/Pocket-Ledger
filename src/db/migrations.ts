@@ -7,6 +7,7 @@ export async function runMigration(db: SQLiteDatabase) {
         CREATE TABLE IF NOT EXISTS books (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            bank_id TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -15,7 +16,7 @@ export async function runMigration(db: SQLiteDatabase) {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             book_id INTEGER NOT NULL,
             name TEXT NOT NULL,
-            bank_id TEXT NOT NULL,
+            bank_id TEXT,
             amount INTEGER NOT NULL,
             direction TEXT NOT NULL CHECK (direction IN ('+', '-')),
             transaction_date TEXT NOT NULL,

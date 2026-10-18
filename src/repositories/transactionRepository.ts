@@ -5,7 +5,7 @@ type TransactionRow = {
   id: number;
   book_id: number;
   name: string;
-  bank_id: string;
+  bank_id: string | null;
   amount: number;
   direction: TransactionDirection;
   transaction_date: string;
@@ -30,7 +30,7 @@ function mapTransaction(row: TransactionRow): Transaction {
 export type CreateTransactionInput = {
   bookId: number;
   name: string;
-  bankId: string;
+  bankId: string | null;
   amount: number;
   direction: TransactionDirection;
   transactionDate: string;
@@ -38,7 +38,7 @@ export type CreateTransactionInput = {
 
 export type UpdateTransactionInput = {
   name: string;
-  bankId: string;
+  bankId: string | null;
   amount: number;
   direction: TransactionDirection;
   transactionDate: string;

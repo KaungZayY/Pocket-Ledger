@@ -13,11 +13,13 @@ import {
 import { Stack, useRouter } from 'expo-router';
 
 import { createBook } from '@/repositories/bookRepository';
+import BankSelector from '@/components/BankSelector';
 
 export default function CreateBookScreen() {
   const router = useRouter();
 
   const [name, setName] = useState('');
+  const [bankId, setBankId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function handleCreateBook() {
@@ -31,7 +33,7 @@ export default function CreateBookScreen() {
     try {
       setSaving(true);
 
-      await createBook(trimmedName);
+      await createBook(trimmedName, bankId);
 
       router.back();
     } catch (error) {
@@ -77,11 +79,23 @@ export default function CreateBookScreen() {
             autoFocus
             returnKeyType="done"
             onSubmitEditing={handleCreateBook}
+            editable={!saving}
           />
 
           <Text style={styles.hint}>
             You can create as many books as you need.
           </Text>
+
+          <Text style={styles.label}>Default bank account (optional)</Text>
+            <Text style={styles.helper}>
+              New transactions will use this bank by default. You can change
+              the bank for an individual transaction.
+            </Text>
+
+            <BankSelector
+              selectedBankId={bankId}
+              onSelect={setBankId}
+            />
         </View>
 
         <Pressable
@@ -127,6 +141,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#172033',
     marginBottom: 10,
+  },
+  helper: {
+    color: '#6B7280',
+    fontSize: 13,
+    lineHeight: 19,
   },
   input: {
     backgroundColor: '#FFFFFF',

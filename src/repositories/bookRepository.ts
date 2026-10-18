@@ -4,6 +4,7 @@ import type { Book } from "@/types/book";
 type BookRow = {
   id: number;
   name: string;
+  bank_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -12,6 +13,7 @@ function mapBook(row: BookRow): Book {
   return {
     id: row.id,
     name: row.name,
+    bankId: row.bank_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -25,6 +27,7 @@ export async function getBookById(id: number): Promise<Book | null> {
       SELECT
         id,
         name,
+        bank_id,
         created_at,
         updated_at
       FROM books
@@ -47,6 +50,7 @@ export async function getBooks(): Promise<Book[]> {
       SELECT
         id,
         name,
+        bank_id,
         created_at,
         updated_at
       FROM books
@@ -56,7 +60,7 @@ export async function getBooks(): Promise<Book[]> {
   return rows.map(mapBook);
 }
 
-export async function createBook(name: string): Promise<Book> {
+export async function createBook(name: string, bankId: string | null = null): Promise<Book> {
   const db = await getDatabase();
 
   const now = new Date().toISOString();
@@ -65,12 +69,14 @@ export async function createBook(name: string): Promise<Book> {
     `
       INSERT INTO books (
         name,
+        bank_id,
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?)
+      VALUES (?, ?, ?, ?)
     `,
     name,
+    bankId,
     now,
     now,
   );
@@ -83,7 +89,7 @@ export async function createBook(name: string): Promise<Book> {
   return book;
 }
 
-export async function updateBook(id: number, name: string): Promise<Book> {
+export async function updateBook(id: number, name: string, bankId: string | null = null): Promise<Book> {
   const db = await getDatabase();
   const now = new Date().toISOString();
 
@@ -92,10 +98,12 @@ export async function updateBook(id: number, name: string): Promise<Book> {
       UPDATE books
       SET
         name = ?,
+        bank_id = ?,
         updated_at = ?
       WHERE id = ?
     `,
     name,
+    bankId,
     now,
     id,
   );

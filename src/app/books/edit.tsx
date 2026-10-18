@@ -14,6 +14,7 @@ import {
   getBookById,
   updateBook,
 } from "@/repositories/bookRepository";
+import BankSelector from '@/components/BankSelector';
 
 function getParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -24,6 +25,7 @@ export default function EditBookScreen() {
   const bookId = Number(getParam(params.bookId));
 
   const [name, setName] = useState("");
+  const [bankId, setBankId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -52,6 +54,8 @@ export default function EditBookScreen() {
           }
 
           setName(book.name);
+          setBankId(book.bankId);
+          console.log(book)
         } catch {
           if (active) {
             Alert.alert("Error", "Could not load the book.");
@@ -80,7 +84,7 @@ export default function EditBookScreen() {
     setSaving(true);
 
     try {
-      await updateBook(bookId, trimmedName);
+      await updateBook(bookId, trimmedName, bankId);
       router.back();
     } catch {
       Alert.alert("Error", "Could not update the book.");
@@ -138,6 +142,17 @@ export default function EditBookScreen() {
           maxLength={100}
           editable={!saving}
         />
+
+        <Text style={styles.label}>Default bank account (optional)</Text>
+        <Text style={styles.helper}>
+          Choose a default bank for new transactions, or select No default
+          bank to leave it unassigned.
+        </Text>
+
+        <BankSelector
+          selectedBankId={bankId}
+          onSelect={setBankId}
+        />
       </View>
 
       <View style={styles.footer}>
@@ -193,6 +208,11 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  helper: {
+    color: '#6B7280',
+    fontSize: 13,
+    lineHeight: 19,
   },
   input: {
     borderWidth: 1,
