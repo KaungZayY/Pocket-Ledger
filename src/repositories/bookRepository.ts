@@ -54,7 +54,6 @@ export async function getBooks(): Promise<Book[]> {
         created_at,
         updated_at
       FROM books
-      ORDER BY created_at DESC
     `,
   );
   return rows.map(mapBook);

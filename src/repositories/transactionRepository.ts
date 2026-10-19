@@ -1,7 +1,7 @@
 import { getDatabase } from "@/db/database";
 import type { Transaction, TransactionDirection } from "@/types/transaction";
 
-type TransactionRow = {
+export type TransactionRow = {
   id: number;
   book_id: number;
   name: string;

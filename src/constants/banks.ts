@@ -1,7 +1,9 @@
+import type { ImageSourcePropType } from "react-native";
+
 export type Bank = {
   id: string;
   name: string;
-  logo: string;
+  logo: ImageSourcePropType;
 };
 
 export const BANKS: Bank[] = [
