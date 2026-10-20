@@ -319,9 +319,9 @@ export default function BookDetailsScreen() {
                   <View style={{ width: Math.max(tableWidth, MIN_TABLE_W) }}>
                     <View style={[styles.tr, styles.thead]}>
                       <Text style={[styles.th, styles.colName]}>Transaction</Text>
-                      <Text style={[styles.th, styles.colNum]}>Before</Text>
+                      {/* <Text style={[styles.th, styles.colNum]}>Before</Text> */}
                       <Text style={[styles.th, styles.colNum]}>Amount</Text>
-                      <Text style={[styles.th, styles.colNum]}>After</Text>
+                      <Text style={[styles.th, styles.colNum]}>Balance</Text>
                     </View>
 
                     {statement.rows.map((row, index) => {
@@ -366,9 +366,9 @@ export default function BookDetailsScreen() {
                             </View>
                           </View>
 
-                          <Text style={[styles.td, styles.colNum, styles.muted]}>
+                          {/* <Text style={[styles.td, styles.colNum, styles.muted]}>
                             {formatBalance(row.before)}
-                          </Text>
+                          </Text> */}
                           <View style={styles.colNum}>
                             <Text
                               style={[
@@ -451,7 +451,7 @@ function SummaryItem({
 
 /* ---------- styles ---------- */
 
-const NUM_W = 76;
+const NUM_W = 100;
 const MIN_TABLE_W = 330;
 
 const styles = StyleSheet.create({

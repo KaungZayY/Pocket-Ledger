@@ -227,25 +227,33 @@ export default function TransactionScreen() {
 
       <Text style={styles.label}>Transaction type</Text>
       <View style={styles.directionRow}>
-        {(["+", "-"] as const).map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setDirection(item)}
-            style={[
-              styles.directionButton,
-              direction === item && styles.directionSelected,
-            ]}
-          >
-            <Text
+        {(["+", "-"] as const).map((item) => {
+          const isCredit = item === "+";
+          const selected = direction === item;
+
+          return (
+            <Pressable
+              key={item}
+              onPress={() => setDirection(item)}
               style={[
-                styles.directionText,
-                direction === item && styles.directionTextSelected,
+                styles.directionButton,
+                isCredit ? styles.creditButton : styles.debitButton,
+                selected &&
+                  (isCredit ? styles.creditSelected : styles.debitSelected),
               ]}
             >
-              {item === "+" ? "Credit (+)" : "Debit (-)"}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                style={[
+                  styles.directionText,
+                  isCredit ? styles.creditText : styles.debitText,
+                  selected && styles.directionTextSelected,
+                ]}
+              >
+                {isCredit ? "Credit (+)" : "Debit (-)"}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <Text style={styles.label}>Name / From or To</Text>
@@ -338,10 +346,12 @@ const styles = StyleSheet.create({
     padding: 13,
     alignItems: "center",
   },
-  directionSelected: {
-    backgroundColor: "#1D4ED8",
-    borderColor: "#1D4ED8",
-  },
+  creditButton: { borderColor: "#15803D" },
+  debitButton: { borderColor: "#DC2626" },
+  creditSelected: { backgroundColor: "#15803D" },
+  debitSelected: { backgroundColor: "#DC2626" },
+  creditText: { color: "#15803D" },
+  debitText: { color: "#DC2626" },
   directionText: {
     fontWeight: "600",
   },
